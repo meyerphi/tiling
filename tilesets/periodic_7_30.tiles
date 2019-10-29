@@ -1,0 +1,8 @@
+# Tiles that periodically tile a square of 30. Example 1 from Jeandel and Vanier, Undecidability of the Domino Problem, https://www.cirm-math.fr/ProgWeebly/Renc1720/Jeandel.pdf
+0 2 1 1
+2 1 2 1
+1 0 2 1
+2 0 1 3
+2 0 3 0
+0 2 2 2
+2 0 0 2

@@ -7,7 +7,7 @@ Implementation of a semi-decision procedure for the [tiling/domino problem](http
 The problem is to decide whether a set of [Wang tiles](https://en.wikipedia.org/wiki/Wang_tile), i.e. square tiles defined by their colors on the north/south/west/east side, can tile the infinite plane.
 Moreover, one can state the problem as classifying a set of tiles as one the following:
 
-- Periodic: the tileset can tile the plane with a periodic pattern, i.e. they can be composed into a finite repeatable rectangular pattern.
+- Periodic: the tileset can tile the plane with a periodic pattern, i.e. the tiles can be composed into a finite repeatable rectangular pattern.
 - Aperiodic: the tileset can tile the plane, but not with a periodic pattern.
 - Finite: the tileset can not tile the plane, and can therefore also not tile a finite square of some size.
 
@@ -25,7 +25,7 @@ bin/tiling [OPTIONS] tileset [output.svg]
 ```
 Here, `tileset` is the file name of the tileset to be analyzed. A few examples are given in the `tilesets` folder.
 With `output.svg` one can specify an output file for a periodic pattern, if one is found.
-The options include `-k MAX_k` to specify the maximum value of `k` until which a transducer in the composition is constructed.
+The options include `-k <max_k>` to specify the maximum value of `k` until which a transducer in the composition is constructed.
 Invoke the program with the `-h` option for a list of other options.
 
 ### Input

@@ -21,8 +21,8 @@ void print_usage(const char* argv[]) {
     std::cout << "Usage: " << argv[0] << " [OPTIONS] tileset [output.svg]" << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "    -h          Show this help" << std::endl;
-    std::cout << "    -k MAX_K    Maximum value of k to construct transducer for" << std::endl;
-    std::cout << "    -v          Increase verbosity (may be specified more than once" << std::endl;
+    std::cout << "    -k <max_k>  Maximum value of k to construct transducer for" << std::endl;
+    std::cout << "    -v          Increase verbosity (may be specified more than once)" << std::endl;
 
 }
 

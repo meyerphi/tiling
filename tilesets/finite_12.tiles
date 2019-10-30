@@ -1,8 +1,0 @@
-# Tiles that non-periodically tiles a square of 12, but not 15. From Jeandel and Vanier, The Undecidability of the Domino Problem, Figure 1
-0 2 0 0
-0 1 0 1
-1 0 0 2
-0 0 1 0
-2 1 1 1
-1 0 2 1
-0 1 2 2

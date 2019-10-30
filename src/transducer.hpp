@@ -16,6 +16,10 @@ struct Edge {
     Color south;
     std::vector<TileIndex> tiles;
 
+    Edge() :
+        source(0), target(0), north(0), south(0)
+    {}
+
     Edge(Index source, Index target, Color north, Color south) :
         source(source), target(target), north(north), south(south)
     {}
@@ -23,8 +27,7 @@ struct Edge {
 
 struct Transducer {
     size_t num_nodes;
-    std::vector<Edge> edges;
-    std::vector<std::vector<Index>> succ_edges;
+    std::vector<std::vector<Edge>> succ_edges;
 
     /*
      * Create empty transducer
@@ -73,10 +76,8 @@ struct Transducer {
     }
 
     Edge& add_edge(Index source, Index target, Color north, Color south) {
-        Index e = edges.size();
-        edges.push_back(Edge(source, target, north, south));
-        succ_edges[source].push_back(e);
-        return edges[e];
+        succ_edges[source].push_back(Edge(source, target, north, south));
+        return succ_edges[source].back();
     }
 
     /*
@@ -129,14 +130,13 @@ struct Transducer {
                     call_stack.pop();
                     v = frame.node;
                     j = frame.edge;
-                    Index w = edges[succ_edges[v][j]].target;
+                    Index w = succ_edges[v][j].target;
                     lowlink[v] = std::min(lowlink[v], lowlink[w]);
                     j++;
                 }
             }
             while (!new_node && j != succ_edges[v].size()) {
-                Index e = succ_edges[v][j];
-                Edge& edge = edges[e];
+                Edge& edge = succ_edges[v][j];
                 Index w = edge.target;
 
                 if (index[w] == -1) {
@@ -167,7 +167,7 @@ struct Transducer {
 
     /*
      * Simplify transducer by only keeping edges within the same strongly
-     * connected component.
+     * connected component and removing duplicate edges.
      * Note that we still keep nodes without edges here. Those will
      * however never be used in the next composition step.
      */
@@ -176,14 +176,13 @@ struct Transducer {
         compute_sccs(scc_ids);
 
         for (size_t i = 0; i < num_nodes; i++) {
-            std::vector<Index> new_succ_edges;
+            std::vector<Edge> new_succ_edges;
             for (size_t j = 0; j < succ_edges[i].size(); j++) {
-                Index e = succ_edges[i][j];
-                Edge& edge = edges[e];
+                Edge& edge = succ_edges[i][j];
                 Index v = edge.source;
                 Index w = edge.target;
                 if (scc_ids[v] == scc_ids[w]) {
-                    new_succ_edges.push_back(e);
+                    new_succ_edges.push_back(edge);
                 }
             }
             succ_edges[i].swap(new_succ_edges);
@@ -194,14 +193,14 @@ struct Transducer {
      * DFS to find cycle with same north and south
      * colors along each edge.
      */
-    bool find_cycle(std::vector<Index>& cycle) {
+    bool find_cycle(std::vector<Edge>& cycle) {
         struct StackFrame {
             Index node;
             size_t edge;
         };
 
         std::stack<StackFrame> stack;
-        std::vector<Index> parent(num_nodes, -1);
+        std::vector<Edge> parent(num_nodes);
         std::vector<bool> on_stack(num_nodes, false);
         std::vector<Index> index(num_nodes, -1);
 
@@ -246,20 +245,19 @@ struct Transducer {
                 }
             }
             while (!new_node && j != succ_edges[v].size()) {
-                Index e = succ_edges[v][j];
-                Edge& edge = edges[e];
+                Edge& edge = succ_edges[v][j];
                 if (edge.north == edge.south) {
                     Index w = edge.target;
                     if (index[w] == -1) {
                         // forward edge, explore
-                        parent[w] = e;
+                        parent[w] = edge;
                         stack.push({v, j});
                         v = w;
                         new_node = true;
                     }
                     else if (on_stack[w]) {
                         // backedge, found cycle
-                        parent[w] = e;
+                        parent[w] = edge;
                         cycle_node = w;
                         new_node = true;
                         done = true;
@@ -276,9 +274,9 @@ struct Transducer {
         if (cycle_node >= 0) {
             Index v = cycle_node;
             do {
-                Index e = parent[v];
-                v = edges[e].source;
-                cycle.push_back(e);
+                Edge edge = parent[v];
+                v = edge.source;
+                cycle.push_back(edge);
             }
             while (v != cycle_node);
             std::reverse(std::begin(cycle), std::end(cycle));
@@ -297,14 +295,14 @@ struct Transducer {
      */
     bool periodic(int height, Tiling& tiling) {
         // find cycle with dfs
-        std::vector<Index> cycle;
+        std::vector<Edge> cycle;
 
         if (find_cycle(cycle)) {
             int width = cycle.size();
 
             tiling.set_dimensions(width, height);
             for (int x = 0; x < width; x++) {
-                std::vector<TileIndex>& column = edges[cycle[x]].tiles;
+                std::vector<TileIndex>& column = cycle[x].tiles;
                 for (int y = 0; y < height; y++) {
                     TileIndex i = column[y];
                     tiling.set_tile_index(x, y, i);
@@ -333,11 +331,9 @@ struct Transducer {
         std::map<std::pair<Index, Index>, Index> node_map;
 
         for (size_t i1 = 0; i1 < num_nodes; i1++) {
-            for (Index e1 : succ_edges[i1]) {
+            for (const Edge& edge1 : succ_edges[i1]) {
                 for (size_t i2 = 0; i2 < trans2.num_nodes; i2++) {
-                    for (Index e2 : trans2.succ_edges[i2]) {
-                        const Edge& edge1 = edges[e1];
-                        const Edge& edge2 = trans2.edges[e2];
+                    for (const Edge& edge2 : trans2.succ_edges[i2]) {
 
                         if (edge1.south == edge2.north) {
                             Index j1 = edge1.target;
@@ -379,40 +375,55 @@ struct Transducer {
     }
 
     void print() const {
-        std::cout << "Transducer with n = " << num_nodes << "; m = " << edges.size() << std::endl;
         for (size_t i = 0; i < num_nodes; i++) {
-            std::cout << "Node " << i << ":";
-            std::cout << std::endl;
-            for (Index e : succ_edges[i]) {
-                std::cout << "  " << e << " = " << edges[e].source << " -> " << edges[e].target << "(" << (int)edges[e].north << "/" << (int)edges[e].south << ")" << std::endl;
+            for (const Edge& edge : succ_edges[i]) {
+                std::cout << "  " << edge.source << " -> " << edge.target << " (" << (int)edge.north << "/" << (int)edge.south << ")" << std::endl;
             }
-            std::cout << std::endl;
         }
     }
+};
+
+enum class TilesetClass { FINITE, PERIODIC, APERIODIC, UNKNOWN };
+
+struct TilesetResult {
+    TilesetClass result;
+    Tiling tiling;
 };
 
 /*
  * Semi-decision algorithm to test if set of tiles is periodic or finite.
  */
-int test_periodic(const std::vector<Tile>& tiles, Color num_colors, int max_k, Tiling& tiling) {
-    Transducer trans(num_colors, tiles);
+TilesetResult test(const Tileset& tileset, int max_k, int verbosity = 0) {
+    const Color num_colors = tileset.max_color + 1;
+    Transducer trans(num_colors, tileset.tiles);
     Transducer trans_k(num_colors);
     trans.simplify();
 
+    TilesetResult r;
+    Tiling tiling;
     for (int k = 1; k <= max_k; k++) {
+        if (verbosity >= 1) {
+            std::cout << "Testing k = " << k << std::endl;
+        }
         trans_k = trans_k.compose(trans);
         trans_k.simplify();
-        //std::cout << "Transducer for k = " << k << " after simplification" << std::endl;
-        //trans_k.print();
+        if (verbosity >= 2) {
+            std::cout << "Transducer for k = " << k << " after simplification" << std::endl;
+            trans_k.print();
+        }
         if (trans_k.empty()) {
             // tileset is finite
-            return 0;
+            r.result = TilesetClass::FINITE;
+            return r;
         }
         if (trans_k.periodic(k, tiling)) {
             // tileset is periodic
-            return 1;
+            r.result = TilesetClass::PERIODIC;
+            r.tiling = tiling;
+            return r;
         }
     }
     // unknown result
-    return -1;
+    r.result = TilesetClass::UNKNOWN;
+    return r;
 }

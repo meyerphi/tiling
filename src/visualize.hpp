@@ -57,14 +57,14 @@ void add_tile(const Tile& tile, svg::Document& doc, int x, int y) {
     doc << north << east << south << west << border;
 }
 
-void draw_tiling(const std::vector<Tile>& tiles, const Tiling& tiling, std::string filename) {
+void draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename) {
     svg::Dimensions dimensions(tiling.get_width(), tiling.get_height());
     svg::Document doc(filename, svg::Layout(dimensions, svg::Layout::TopLeft));
 
     for (int x = 0; x < tiling.get_width(); x++) {
         for (int y = 0; y < tiling.get_height(); y++) {
             const TileIndex i = tiling.get_tile_index(x, y);
-            const Tile& tile = tiles[i];
+            const Tile& tile = tileset.get_tile(i);
 
             add_tile(tile, doc, x, y);
         }

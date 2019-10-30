@@ -1,6 +1,8 @@
 #pragma once
 
 #include <iostream>
+#include <sstream>
+#include <fstream>
 #include <vector>
 #include <cassert>
 
@@ -25,6 +27,47 @@ struct Tile {
     }
     bool operator!=(const Tile& rhs) const {
         return !operator==(rhs);
+    }
+};
+
+struct Tileset {
+public:
+    const Color max_color;
+    const std::vector<Tile> tiles;
+
+private:
+    Tileset(Color mc, std::vector<Tile> t) :
+        max_color(mc),
+        tiles(std::move(t))
+    {}
+
+public:
+    const Tile& get_tile(TileIndex i) const {
+        assert(i >= 0);
+        assert(i < tiles.size());
+        return tiles[i];
+    }
+
+    static Tileset parse_tileset(std::istream& in) {
+        int max_color = 0;
+        std::vector<Tile> tiles;
+
+        std::string line;
+        while (std::getline(in, line)) {
+            // check if line is not empty or a a comment
+            if (!line.empty() && line.compare(0, 1, "#")) {
+                std::stringstream linestream(line);
+                int north, south, west, east;
+                linestream >> north >> south >> west >> east;
+                tiles.push_back(Tile(north, south, west, east));
+                max_color = std::max(max_color, north);
+                max_color = std::max(max_color, south);
+                max_color = std::max(max_color, west);
+                max_color = std::max(max_color, east);
+            }
+        }
+
+        return Tileset(max_color, std::move(tiles));
     }
 };
 

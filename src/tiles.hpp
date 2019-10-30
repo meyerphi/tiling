@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include <sstream>
-#include <fstream>
 #include <vector>
 #include <cassert>
 
@@ -20,10 +19,8 @@ struct Tile {
     {}
 
     bool operator==(const Tile& rhs) const {
-        return (north == rhs.north) &&
-            (south == rhs.south) &&
-            (west == rhs.west) &&
-            (east == rhs.east);
+        return north == rhs.north && south == rhs.south &&
+               west  == rhs.west  && east  == rhs.east;
     }
     bool operator!=(const Tile& rhs) const {
         return !operator==(rhs);

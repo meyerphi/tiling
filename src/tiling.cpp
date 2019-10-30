@@ -49,7 +49,7 @@ int main(const int argc, const char* argv[]) {
             if (!arg.compare(1, 1, "k")) {
                 parse_k = true;
             }
-            if (!arg.compare(1, 1, "v")) {
+            else if (!arg.compare(1, 1, "v")) {
                 verbosity++;
             }
             else if (!arg.compare(1, 1, "h")) {
@@ -106,7 +106,7 @@ int main(const int argc, const char* argv[]) {
     }
     else if (r.result == TilesetClass::PERIODIC) {
         Tiling& tiling = r.tiling;
-        std::cout << "periodic " << tiling.get_width() << " " << tiling.get_height() << std::endl;
+        std::cout << "periodic" << std::endl;
         tiling.print();
         if (output_svg) {
             draw_tiling(tileset, tiling, svg_filename);

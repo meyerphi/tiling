@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <stack>
-#include <map>
+#include <limits>
 #include <algorithm>
 
 #include "tiles.hpp"
@@ -23,6 +23,18 @@ struct Edge {
     Edge(Index source, Index target, Color north, Color south) :
         source(source), target(target), north(north), south(south)
     {}
+
+    /*
+     * Note: equality function does not compare the set of tiles,
+     * as it is sufficient to keep one edge with otherwise same values.
+     */
+    bool operator==(const Edge& rhs) const {
+        return source == rhs.source && target == rhs.target &&
+               north  == rhs.north  && south  == rhs.south ;
+    }
+    bool operator!=(const Edge& rhs) const {
+        return !operator==(rhs);
+    }
 };
 
 struct Transducer {
@@ -42,7 +54,7 @@ struct Transducer {
     Transducer(const Color colors) :
         num_nodes(1)
     {
-        succ_edges.resize(1);
+        succ_edges.push_back({});
         for (Color c = 0; c < colors; c++) {
             add_edge(0, 0, c, c);
         }
@@ -76,8 +88,17 @@ struct Transducer {
     }
 
     Edge& add_edge(Index source, Index target, Color north, Color south) {
-        succ_edges[source].push_back(Edge(source, target, north, south));
-        return succ_edges[source].back();
+        Edge edge(source, target, north, south);
+        // do not add duplicate edges
+        std::vector<Edge>& source_edges = succ_edges[source];
+        const auto find_it = std::find(std::begin(source_edges), std::end(source_edges), edge);
+        if (find_it == std::end(source_edges)) {
+            succ_edges[source].push_back(std::move(edge));
+            return succ_edges[source].back();
+        }
+        else {
+            return *find_it;
+        }
     }
 
     /*
@@ -167,7 +188,7 @@ struct Transducer {
 
     /*
      * Simplify transducer by only keeping edges within the same strongly
-     * connected component and removing duplicate edges.
+     * connected component.
      * Note that we still keep nodes without edges here. Those will
      * however never be used in the next composition step.
      */
@@ -327,38 +348,35 @@ struct Transducer {
      * and return the result.
      */
     Transducer compose(const Transducer& trans2) const {
+        size_t product_size = num_nodes * trans2.num_nodes;
+        // detect overflow
+        assert (product_size / num_nodes == trans2.num_nodes);
+
         Transducer composition;
-        std::map<std::pair<Index, Index>, Index> node_map;
+        std::vector<Index> node_map(product_size, -1);
 
         for (size_t i1 = 0; i1 < num_nodes; i1++) {
             for (const Edge& edge1 : succ_edges[i1]) {
                 for (size_t i2 = 0; i2 < trans2.num_nodes; i2++) {
+                    const Index i12 = i1 + i2*num_nodes;
                     for (const Edge& edge2 : trans2.succ_edges[i2]) {
-
                         if (edge1.south == edge2.north) {
                             Index j1 = edge1.target;
                             Index j2 = edge2.target;
+                            const Index j12 = j1 + j2*num_nodes;
 
                             // add/find source node
-                            auto pred_it = node_map.find({i1,i2});
-                            Index pred_index;
-                            if (pred_it == std::end(node_map)) {
+                            Index pred_index = node_map[i12];
+                            if (pred_index == -1) {
                                 pred_index = composition.add_node();
-                                node_map.insert({{i1, i2}, pred_index});
-                            }
-                            else {
-                                pred_index = pred_it->second;
+                                node_map[i12] = pred_index;
                             }
 
                             // add/find target node
-                            auto succ_it = node_map.find({j1,j2});
-                            Index succ_index;
-                            if (succ_it == std::end(node_map)) {
+                            Index succ_index = node_map[j12];
+                            if (succ_index == -1) {
                                 succ_index = composition.add_node();
-                                node_map.insert({{j1, j2}, succ_index});
-                            }
-                            else {
-                                succ_index = succ_it->second;
+                                node_map[j12] = succ_index;
                             }
 
                             Edge& e = composition.add_edge(pred_index, succ_index, edge1.north, edge2.south);
@@ -392,12 +410,17 @@ struct TilesetResult {
 
 /*
  * Semi-decision algorithm to test if set of tiles is periodic or finite.
+ * If it is periodic, also return a periodic tiling.
  */
 TilesetResult test(const Tileset& tileset, int max_k, int verbosity = 0) {
     const Color num_colors = tileset.max_color + 1;
     Transducer trans(num_colors, tileset.tiles);
-    Transducer trans_k(num_colors);
+    if (verbosity >= 2) {
+        std::cout << "Transducer for tileset without simplification" << std::endl;
+        trans.print();
+    }
     trans.simplify();
+    Transducer trans_k(num_colors);
 
     TilesetResult r;
     Tiling tiling;

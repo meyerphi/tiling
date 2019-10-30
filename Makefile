@@ -1,12 +1,13 @@
-all: bin/tiling
-
 LIBDIR=lib
 BINDIR=bin
+SRCDIR=src
 BIN=tiling
 CC=g++
 CCOPTS=-O2 -Wall -std=c++14 -o $@ -I$(LIBDIR)
 
-SRC=src/tiling.cpp src/transducer.hpp src/tiles.hpp src/visualize.hpp lib/simple_svg.hpp
+SRC=$(SRCDIR)/tiling.cpp $(SRCDIR)/transducer.hpp $(SRCDIR)/tiles.hpp $(SRCDIR)/visualize.hpp $(LIBDIR)/simple_svg.hpp
+
+all: $(BINDIR)/$(BIN)
 
 $(BINDIR):
 	mkdir -p $@

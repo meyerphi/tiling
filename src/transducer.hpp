@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <stack>
+#include <deque>
 #include <limits>
 #include <algorithm>
 
@@ -35,6 +36,12 @@ struct Edge {
     bool operator!=(const Edge& rhs) const {
         return !operator==(rhs);
     }
+};
+
+// optimized stack frame for Tarjan and DFS
+struct StackFrame {
+    Index node;
+    size_t edge;
 };
 
 struct Transducer {
@@ -105,10 +112,6 @@ struct Transducer {
      * Tarjan's algorithm for computing SCCs.
      */
     void compute_sccs(std::vector<Index>& scc_ids) {
-        struct StackFrame {
-            Index node;
-            size_t edge;
-        };
 
         std::stack<StackFrame> call_stack;
         std::vector<bool> on_stack(num_nodes, false);
@@ -214,12 +217,7 @@ struct Transducer {
      * DFS to find cycle with same north and south
      * colors along each edge.
      */
-    bool find_cycle(std::vector<Edge>& cycle) {
-        struct StackFrame {
-            Index node;
-            size_t edge;
-        };
-
+    std::vector<Edge> find_cycle() {
         std::stack<StackFrame> stack;
         std::vector<Edge> parent(num_nodes);
         std::vector<bool> on_stack(num_nodes, false);
@@ -293,6 +291,7 @@ struct Transducer {
         }
 
         if (cycle_node >= 0) {
+            std::vector<Edge> cycle;
             Index v = cycle_node;
             do {
                 Edge edge = parent[v];
@@ -301,11 +300,79 @@ struct Transducer {
             }
             while (v != cycle_node);
             std::reverse(std::begin(cycle), std::end(cycle));
-            return true;
+            return cycle;
         }
         else {
-            return false;
+            return {};
         }
+    }
+
+    /*
+     * BFS from each node to find minimal cycle
+     * with same north and south colors along each edge.
+     */
+    std::vector<Edge> find_minimal_cycle() {
+        std::vector<Edge> minimal_cycle;
+        Index minimal_cycle_length = std::numeric_limits<Index>::max();
+        std::vector<Edge> parent(num_nodes);
+        std::vector<Index> depth(num_nodes, -1);
+
+        std::vector<Index> scc_ids(num_nodes, -1);
+        compute_sccs(scc_ids);
+
+        for (Index i = 0; i < (Index)num_nodes; i++) {
+            std::deque<Index> queue;
+            std::vector<bool> visited(num_nodes, false);
+
+            queue.push_back(i);
+            depth[i] = 0;
+            Index i_scc = scc_ids[i];
+
+            while (!queue.empty()) {
+                Index u = queue.front();
+                queue.pop_front();
+                Index ud = depth[u];
+                Index u_scc = scc_ids[u];
+
+                if (u_scc == i_scc && ud + 1 < minimal_cycle_length) {
+                    for (const Edge& edge : succ_edges[u]) {
+                        if (edge.north == edge.south) {
+                            Index v = edge.target;
+                            if (!visited[v]) {
+                                parent[v] = edge;
+                                visited[v] = true;
+                                depth[v] = ud + 1;
+                                if (v == i) {
+                                    // found cycle
+                                    queue.clear();
+                                    break;
+                                }
+                                else {
+                                    queue.push_back(v);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (visited[i]) {
+                std::vector<Edge> cycle;
+                Index v = i;
+                do {
+                    Edge edge = parent[v];
+                    v = edge.source;
+                    cycle.push_back(edge);
+                }
+                while (v != i);
+                std::reverse(std::begin(cycle), std::end(cycle));
+                if (minimal_cycle.size() == 0 || cycle.size() < minimal_cycle.size()) {
+                    minimal_cycle = cycle;
+                }
+            }
+        }
+
+        return minimal_cycle;
     }
 
     /*
@@ -316,9 +383,9 @@ struct Transducer {
      */
     bool periodic(int height, Tiling& tiling) {
         // find cycle with dfs
-        std::vector<Edge> cycle;
+        std::vector<Edge> cycle = find_cycle();
 
-        if (find_cycle(cycle)) {
+        if (!cycle.empty()) {
             int width = cycle.size();
 
             tiling.set_dimensions(width, height);

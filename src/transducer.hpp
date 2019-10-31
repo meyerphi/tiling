@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <stack>
-#include <deque>
 #include <limits>
 #include <algorithm>
 
@@ -111,47 +110,51 @@ struct Transducer {
     /*
      * Tarjan's algorithm for computing SCCs.
      */
-    void compute_sccs(std::vector<Index>& scc_ids) {
+    std::vector<Index> compute_sccs() {
+        std::vector<Index> scc_ids(num_nodes, -1);
 
-        std::stack<StackFrame> call_stack;
+        std::stack<StackFrame> stack;
         std::vector<bool> on_stack(num_nodes, false);
         std::vector<Index> index(num_nodes, -1);
         std::vector<Index> lowlink(num_nodes, -1);
-        std::stack<Index> stack;
+        std::stack<Index> scc_stack;
 
         Index cur_scc_id = 0;
 
         size_t i = 0;
         Index cur_index = 0;
         bool new_node = false;
-        bool done = false;
 
         Index v;
         size_t j;
-        while (!done) {
+        while (true) {
             if (new_node) {
                 index[v] = cur_index;
                 lowlink[v] = cur_index;
                 cur_index++;
-                stack.push(v);
+                scc_stack.push(v);
                 on_stack[v] = true;
                 j = 0;
                 new_node = false;
             }
             else {
-                if (call_stack.empty()) {
+                if (stack.empty()) {
+                    // find next initial node
                     while (i < num_nodes && index[i] != -1) {
                         i++;
                     }
                     if (i == num_nodes) {
-                        done = true;
+                        break;
                     }
-                    v = i;
-                    new_node = true;
+                    else {
+                        v = i;
+                        new_node = true;
+                    }
                 }
                 else {
-                    StackFrame frame = call_stack.top();
-                    call_stack.pop();
+                    // backtrack from edge, update lowlink
+                    StackFrame frame = stack.top();
+                    stack.pop();
                     v = frame.node;
                     j = frame.edge;
                     Index w = succ_edges[v][j].target;
@@ -162,23 +165,26 @@ struct Transducer {
             while (!new_node && j != succ_edges[v].size()) {
                 Edge& edge = succ_edges[v][j];
                 Index w = edge.target;
-
                 if (index[w] == -1) {
-                    call_stack.push({v, j});
+                    // forward edge
+                    stack.push({v, j});
                     v = w;
                     new_node = true;
                 }
                 else if (on_stack[w]) {
+                    // backedge, v and w are in same SCC
                     lowlink[v] = std::min(lowlink[v], index[w]);
                 }
                 j++;
             }
             if (!new_node) {
+                // backtrack from node v
                 if (lowlink[v] == index[v]) {
+                    // create new SCC
                     Index w;
                     do {
-                        w = stack.top();
-                        stack.pop();
+                        w = scc_stack.top();
+                        scc_stack.pop();
                         scc_ids[w] = cur_scc_id;
                         on_stack[w] = false;
                     }
@@ -187,6 +193,8 @@ struct Transducer {
                 }
             }
         }
+
+        return scc_ids;
     }
 
     /*
@@ -196,8 +204,7 @@ struct Transducer {
      * however never be used in the next composition step.
      */
     void simplify() {
-        std::vector<Index> scc_ids(num_nodes, -1);
-        compute_sccs(scc_ids);
+        std::vector<Index> scc_ids = compute_sccs();
 
         for (size_t i = 0; i < num_nodes; i++) {
             std::vector<Edge> new_succ_edges;
@@ -219,24 +226,25 @@ struct Transducer {
      */
     std::vector<Edge> find_cycle() {
         std::stack<StackFrame> stack;
-        std::vector<Edge> parent(num_nodes);
         std::vector<bool> on_stack(num_nodes, false);
         std::vector<Index> index(num_nodes, -1);
 
         size_t i = 0;
-        Index cycle_node = -1;
         Index cur_index = 0;
         bool new_node = false;
-        bool done = false;
 
-        Index v = -1;
+        std::vector<Edge> parent(num_nodes);
+        Index cycle_node;
+        bool found_cycle = false;
+
+        Index v;
         size_t j = 0;
-        while (!done) {
+        while (!found_cycle) {
             if (new_node) {
                 // explore new node
-                on_stack[v] = true;
                 index[v] = cur_index;
                 cur_index++;
+                on_stack[v] = true;
                 j = 0;
                 new_node = false;
             }
@@ -247,7 +255,7 @@ struct Transducer {
                         i++;
                     }
                     if (i == num_nodes) {
-                        done = true;
+                        break;
                     }
                     else {
                         v = i;
@@ -255,7 +263,7 @@ struct Transducer {
                     }
                 }
                 else {
-                    // explore next edge after backtracking
+                    // backtrack from edge
                     StackFrame frame = stack.top();
                     stack.pop();
                     v = frame.node;
@@ -268,7 +276,7 @@ struct Transducer {
                 if (edge.north == edge.south) {
                     Index w = edge.target;
                     if (index[w] == -1) {
-                        // forward edge, explore
+                        // forward edge
                         parent[w] = edge;
                         stack.push({v, j});
                         v = w;
@@ -279,20 +287,21 @@ struct Transducer {
                         parent[w] = edge;
                         cycle_node = w;
                         new_node = true;
-                        done = true;
+                        found_cycle = true;
                     }
                 }
                 j++;
             }
             if (!new_node) {
-                // backtrack from current node
+                // backtrack from node v
                 on_stack[v] = false;
             }
         }
 
-        if (cycle_node >= 0) {
+        if (found_cycle) {
+            // create cycle
             std::vector<Edge> cycle;
-            Index v = cycle_node;
+            v = cycle_node;
             do {
                 Edge edge = parent[v];
                 v = edge.source;
@@ -305,74 +314,6 @@ struct Transducer {
         else {
             return {};
         }
-    }
-
-    /*
-     * BFS from each node to find minimal cycle
-     * with same north and south colors along each edge.
-     */
-    std::vector<Edge> find_minimal_cycle() {
-        std::vector<Edge> minimal_cycle;
-        Index minimal_cycle_length = std::numeric_limits<Index>::max();
-        std::vector<Edge> parent(num_nodes);
-        std::vector<Index> depth(num_nodes, -1);
-
-        std::vector<Index> scc_ids(num_nodes, -1);
-        compute_sccs(scc_ids);
-
-        for (Index i = 0; i < (Index)num_nodes; i++) {
-            std::deque<Index> queue;
-            std::vector<bool> visited(num_nodes, false);
-
-            queue.push_back(i);
-            depth[i] = 0;
-            Index i_scc = scc_ids[i];
-
-            while (!queue.empty()) {
-                Index u = queue.front();
-                queue.pop_front();
-                Index ud = depth[u];
-                Index u_scc = scc_ids[u];
-
-                if (u_scc == i_scc && ud + 1 < minimal_cycle_length) {
-                    for (const Edge& edge : succ_edges[u]) {
-                        if (edge.north == edge.south) {
-                            Index v = edge.target;
-                            if (!visited[v]) {
-                                parent[v] = edge;
-                                visited[v] = true;
-                                depth[v] = ud + 1;
-                                if (v == i) {
-                                    // found cycle
-                                    queue.clear();
-                                    break;
-                                }
-                                else {
-                                    queue.push_back(v);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (visited[i]) {
-                std::vector<Edge> cycle;
-                Index v = i;
-                do {
-                    Edge edge = parent[v];
-                    v = edge.source;
-                    cycle.push_back(edge);
-                }
-                while (v != i);
-                std::reverse(std::begin(cycle), std::end(cycle));
-                if (minimal_cycle.size() == 0 || cycle.size() < minimal_cycle.size()) {
-                    minimal_cycle = cycle;
-                }
-            }
-        }
-
-        return minimal_cycle;
     }
 
     /*

@@ -281,7 +281,7 @@ struct Transducer {
             std::vector<Edge>& cycle
     ) {
         StackFrame& frame = stack.top();
-        Index v = frame.node;
+        const Index v = frame.node;
         const size_t end = succ_edges[v].size();
         for (size_t i = frame.edge; i < end; i++) {
             // begin edge
@@ -296,15 +296,12 @@ struct Transducer {
                 }
                 else if (on_stack[w]) {
                     // found cycle
-                    do {
-                        cycle.push_back(succ_edges[v][i]);
+                    cycle.push_back(succ_edges[v][i]);
+                    while (stack.top().node != w) {
                         stack.pop();
                         frame = stack.top();
-                        v = frame.node;
-                        i = frame.edge-1;
+                        cycle.push_back(succ_edges[frame.node][frame.edge-1]);
                     }
-                    while (v != w);
-
                     std::reverse(std::begin(cycle), std::end(cycle));
                     return true;
                 }

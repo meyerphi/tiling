@@ -109,7 +109,9 @@ int main(const int argc, const char* argv[]) {
         std::cout << "periodic" << std::endl;
         tiling.print();
         if (output_svg) {
-            draw_tiling(tileset, tiling, svg_filename);
+            if (!draw_tiling(tileset, tiling, svg_filename)) {
+                return EXIT_FAILURE;
+            }
         }
     }
     else if (r.result == TilesetClass::APERIODIC) {

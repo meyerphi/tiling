@@ -57,7 +57,12 @@ void add_tile(const Tile& tile, svg::Document& doc, int x, int y) {
     doc << north << east << south << west << border;
 }
 
-void draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename) {
+bool draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename) {
+    if (tileset.max_color >= num_available_colors) {
+        std::cerr << "Error: not enough colors available to draw tiling" << std::endl;
+        return false;
+    }
+
     svg::Dimensions dimensions(tiling.get_width(), tiling.get_height());
     svg::Document doc(filename, svg::Layout(dimensions, svg::Layout::TopLeft));
 
@@ -71,4 +76,5 @@ void draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filen
     }
 
     doc.save();
+    return true;
 }

@@ -10,14 +10,13 @@
 typedef int Index;
 
 struct Edge {
-    Index source;
     Index target;
     Color north;
     Color south;
     std::vector<TileIndex> tiles;
 
-    Edge(Index source, Index target, Color north, Color south) :
-        source(source), target(target), north(north), south(south)
+    Edge(Index target, Color north, Color south) :
+        target(target), north(north), south(south)
     {}
 
     /*
@@ -25,8 +24,7 @@ struct Edge {
      * as it is sufficient to keep one edge with otherwise same values.
      */
     bool operator==(const Edge& rhs) const {
-        return source == rhs.source && target == rhs.target &&
-               north  == rhs.north  && south  == rhs.south ;
+        return target == rhs.target && north == rhs.north && south == rhs.south;
     }
     bool operator!=(const Edge& rhs) const {
         return !operator==(rhs);
@@ -145,7 +143,7 @@ struct Transducer {
     }
 
     Edge* add_edge(Index source, Index target, Color north, Color south) {
-        Edge edge(source, target, north, south);
+        Edge edge(target, north, south);
         // do not add duplicate edges
         std::vector<Edge>& source_edges = succ_edges[source];
         const auto find_it = std::find(std::begin(source_edges), std::end(source_edges), edge);
@@ -164,7 +162,7 @@ struct Transducer {
             DoubleStack<StackFrame>& stack,
             Index& index,
             Index v
-    ) {
+    ) const {
         stack.push_front({v, 0});
         root[v] = true;
         rindex[v] = index;
@@ -177,7 +175,7 @@ struct Transducer {
             DoubleStack<StackFrame>& stack,
             Index& index,
             Index& c
-    ) {
+    ) const {
         StackFrame& frame = stack.top_front();
         const Index v = frame.node;
         const size_t end = succ_edges[v].size();
@@ -222,7 +220,7 @@ struct Transducer {
     /* Pearce's algorithm for computing SCCs from
      * "A Space-Efficient Algorithm for Finding Strongly Connected Components"
      */
-    std::vector<Index> compute_sccs() {
+    std::vector<Index> compute_sccs() const {
         std::vector<Index> rindex(num_nodes, 0);
         std::vector<bool> root(num_nodes, false);
         DoubleStack<StackFrame> stack(num_nodes);
@@ -252,10 +250,11 @@ struct Transducer {
         std::vector<Index> scc_ids = compute_sccs();
 
         for (size_t i = 0; i < num_nodes; i++) {
+            const Index source_scc_id = scc_ids[i];
             std::vector<Edge> new_succ_edges;
             for (size_t j = 0; j < succ_edges[i].size(); j++) {
                 Edge& edge = succ_edges[i][j];
-                if (scc_ids[edge.source] == scc_ids[edge.target]) {
+                if (source_scc_id == scc_ids[edge.target]) {
                     new_succ_edges.push_back(std::move(edge));
                 }
             }
@@ -268,7 +267,7 @@ struct Transducer {
             std::vector<bool>& on_stack,
             std::stack<StackFrame, std::vector<StackFrame>>& stack,
             Index v
-    ) {
+    ) const {
         stack.push({v, 0});
         visited[v] = true;
         on_stack[v] = true;
@@ -280,7 +279,7 @@ struct Transducer {
             std::stack<StackFrame, std::vector<StackFrame>>& stack,
             std::vector<Edge>& cycle,
             const bool periodic
-    ) {
+    ) const {
         StackFrame& frame = stack.top();
         const Index v = frame.node;
         const size_t end = succ_edges[v].size();
@@ -314,7 +313,7 @@ struct Transducer {
         return false;
     }
 
-    std::vector<Edge> find_cycle(const bool periodic) {
+    std::vector<Edge> find_cycle(const bool periodic) const {
         std::vector<bool> visited(num_nodes, false);
         std::vector<bool> on_stack(num_nodes, false);
 
@@ -343,7 +342,7 @@ struct Transducer {
      * If the transducer contains a periodic cycle, it
      * returns the cycle as a rectangular tiling.
      */
-    bool periodic(int height, Tiling& tiling, const bool proper) {
+    bool periodic(int height, Tiling& tiling, const bool proper) const {
         // find cycle with dfs
         std::vector<Edge> cycle = find_cycle(proper);
 
@@ -363,7 +362,7 @@ struct Transducer {
         return false;
     }
 
-    bool empty() {
+    bool empty() const {
         for (size_t i = 0; i < num_nodes; i++) {
             if (!succ_edges[i].empty()) {
                 return false;
@@ -410,6 +409,8 @@ struct Transducer {
 
                             Edge* edge = composition.add_edge(pred_index, succ_index, edge1.north, edge2.south);
                             if (edge != nullptr) {
+                                // this part can be omitted if one only needs to decide periodicity,
+                                // but is needed to actually to recover a periodic tiling
                                 edge->tiles.reserve(edge1.tiles.size() + edge2.tiles.size());
                                 edge->tiles.insert(std::end(edge->tiles), std::cbegin(edge1.tiles), std::cend(edge1.tiles));
                                 edge->tiles.insert(std::end(edge->tiles), std::cbegin(edge2.tiles), std::cend(edge2.tiles));
@@ -426,7 +427,7 @@ struct Transducer {
     void print() const {
         for (size_t i = 0; i < num_nodes; i++) {
             for (const Edge& edge : succ_edges[i]) {
-                std::cout << "  " << edge.source << " -> " << edge.target << " (" << (int)edge.north << "/" << (int)edge.south << ")" << std::endl;
+                std::cout << "  " << i << " -> " << edge.target << " (" << (int)edge.north << "/" << (int)edge.south << ")" << std::endl;
             }
         }
     }

@@ -16,10 +16,6 @@ struct Edge {
     Color south;
     std::vector<TileIndex> tiles;
 
-    Edge() :
-        source(0), target(0), north(0), south(0)
-    {}
-
     Edge(Index source, Index target, Color north, Color south) :
         source(source), target(target), north(north), south(south)
     {}
@@ -68,15 +64,15 @@ struct DoubleStack {
         return fp == 0;
     }
 
-    T top_front() const {
+    T& top_front() {
         return items[fp-1];
     }
 
-    T pop_front() {
-        return items[--fp];
+    void pop_front() {
+        fp--;
     }
 
-    void push_front(T item) {
+    void push_front(const T& item) {
         items[fp++] = item;
     }
 
@@ -88,15 +84,15 @@ struct DoubleStack {
         return bp == items.size();
     }
 
-    T top_back() const {
+    T& top_back() {
         return items[bp];
     }
 
-    T pop_back() {
-        return items[bp++];
+    void pop_back() {
+        bp++;
     }
 
-    void push_back(T item) {
+    void push_back(const T& item) {
         items[--bp] = item;
 	}
 };
@@ -134,12 +130,9 @@ struct Transducer {
         TileIndex t = 0;
         for (auto it = std::cbegin(tiles); it < std::cend(tiles); it++, t++) {
             const Tile& tile = *it;
-            // do not add duplicate tiles
-            const auto find_it = std::find(std::cbegin(tiles), it, tile);
-            if (find_it == it) {
-                Edge& edge = add_edge(tile.west, tile.east, tile.north, tile.south);
-                // only keep index of tile in edge
-                edge.tiles.push_back(t);
+            Edge* edge = add_edge(tile.west, tile.east, tile.north, tile.south);
+            if (edge != nullptr) {
+                edge->tiles.push_back(t);
             }
         }
     }
@@ -151,30 +144,28 @@ struct Transducer {
         return i;
     }
 
-    Edge& add_edge(Index source, Index target, Color north, Color south) {
+    Edge* add_edge(Index source, Index target, Color north, Color south) {
         Edge edge(source, target, north, south);
         // do not add duplicate edges
         std::vector<Edge>& source_edges = succ_edges[source];
         const auto find_it = std::find(std::begin(source_edges), std::end(source_edges), edge);
         if (find_it == std::end(source_edges)) {
             succ_edges[source].push_back(std::move(edge));
-            return succ_edges[source].back();
+            return &succ_edges[source].back();
         }
         else {
-            return *find_it;
+            return nullptr;
         }
     }
 
     inline void pearce_begin_visiting(
             std::vector<Index>& rindex,
             std::vector<bool>& root,
-            DoubleStack<Index>& vs,
-            std::stack<size_t, std::vector<size_t>>& is,
+            DoubleStack<StackFrame>& stack,
             Index& index,
             Index v
     ) {
-        vs.push_front(v);
-        is.push(0);
+        stack.push_front({v, 0});
         root[v] = true;
         rindex[v] = index;
         index++;
@@ -183,15 +174,14 @@ struct Transducer {
     void pearce_visit_loop(
             std::vector<Index>& rindex,
             std::vector<bool>& root,
-            DoubleStack<Index>& vs,
-            std::stack<size_t, std::vector<size_t>>& is,
+            DoubleStack<StackFrame>& stack,
             Index& index,
             Index& c
     ) {
-        const Index v = vs.top_front();
-        const size_t begin = is.top();
+        StackFrame& frame = stack.top_front();
+        const Index v = frame.node;
         const size_t end = succ_edges[v].size();
-        for (size_t i = begin; i <= end; i++) {
+        for (size_t i = frame.edge; i <= end; i++) {
             if (i > 0) {
                 // finish edge
                 const Index w = succ_edges[v][i-1].target;
@@ -204,20 +194,20 @@ struct Transducer {
                 // begin edge
                 const Index w = succ_edges[v][i].target;
                 if (rindex[w] == 0) {
-                    is.pop();
-                    is.push(i+1);
-                    pearce_begin_visiting(rindex, root, vs, is, index, w);
+                    frame.edge = i+1;
+                    pearce_begin_visiting(rindex, root, stack, index, w);
                     return;
                 }
             }
         }
         // finish visiting
-        vs.pop_front();
-        is.pop();
+        stack.pop_front();
         if (root[v]) {
+            // create SCC
             index--;
-            while (!vs.empty_back() && rindex[v] <= rindex[vs.top_back()]) {
-                Index w = vs.pop_back();
+            while (!stack.empty_back() && rindex[v] <= rindex[stack.top_back().node]) {
+                Index w = stack.top_back().node;
+                stack.pop_back();
                 rindex[w] = c;
                 index--;
             }
@@ -225,123 +215,31 @@ struct Transducer {
             c--;
         }
         else {
-            vs.push_back(v);
+            stack.push_back({v, 0});
         }
     }
 
     /* Pearce's algorithm for computing SCCs from
      * "A Space-Efficient Algorithm for Finding Strongly Connected Components"
      */
-    std::vector<Index> compute_sccs_pearce() {
+    std::vector<Index> compute_sccs() {
         std::vector<Index> rindex(num_nodes, 0);
         std::vector<bool> root(num_nodes, false);
-        DoubleStack<Index> vs(num_nodes);
-        std::vector<size_t> is_container; is_container.reserve(num_nodes);
-        std::stack<size_t, std::vector<size_t>> is(std::move(is_container));
+        DoubleStack<StackFrame> stack(num_nodes);
 
         Index index = 1;
         Index c = num_nodes - 1;
 
         for (size_t v = 0; v < num_nodes; v++) {
             if (rindex[v] == 0) {
-                pearce_begin_visiting(rindex, root, vs, is, index, v);
-                while (!vs.empty_front()) {
-                    pearce_visit_loop(rindex, root, vs, is, index, c);
+                pearce_begin_visiting(rindex, root, stack, index, v);
+                while (!stack.empty_front()) {
+                    pearce_visit_loop(rindex, root, stack, index, c);
                 }
             }
         }
 
         return rindex;
-    }
-
-    /*
-     * Tarjan's algorithm for computing SCCs.
-     */
-    std::vector<Index> compute_sccs_tarjan() {
-        std::vector<Index> scc_ids(num_nodes, 0);
-
-        std::stack<StackFrame> stack;
-        std::vector<bool> on_stack(num_nodes, false);
-        std::vector<Index> index(num_nodes, 0);
-        std::vector<Index> lowlink(num_nodes, 0);
-        std::stack<Index> scc_stack;
-
-        Index cur_scc_id = 0;
-
-        size_t i = 0;
-        Index cur_index = 1;
-        bool new_node = false;
-
-        Index v;
-        size_t j;
-        while (true) {
-            if (new_node) {
-                index[v] = cur_index;
-                lowlink[v] = cur_index;
-                cur_index++;
-                scc_stack.push(v);
-                on_stack[v] = true;
-                j = 0;
-                new_node = false;
-            }
-            else {
-                if (stack.empty()) {
-                    // find next initial node
-                    while (i < num_nodes && index[i] != 0) {
-                        i++;
-                    }
-                    if (i == num_nodes) {
-                        break;
-                    }
-                    else {
-                        v = i;
-                        new_node = true;
-                    }
-                }
-                else {
-                    // backtrack from edge, update lowlink
-                    StackFrame frame = stack.top();
-                    stack.pop();
-                    v = frame.node;
-                    j = frame.edge;
-                    Index w = succ_edges[v][j].target;
-                    lowlink[v] = std::min(lowlink[v], lowlink[w]);
-                    j++;
-                }
-            }
-            while (!new_node && j != succ_edges[v].size()) {
-                Edge& edge = succ_edges[v][j];
-                Index w = edge.target;
-                if (index[w] == 0) {
-                    // forward edge
-                    stack.push({v, j});
-                    v = w;
-                    new_node = true;
-                }
-                else if (on_stack[w]) {
-                    // backedge, v and w are in same SCC
-                    lowlink[v] = std::min(lowlink[v], index[w]);
-                }
-                j++;
-            }
-            if (!new_node) {
-                // backtrack from node v
-                if (lowlink[v] == index[v]) {
-                    // create new SCC
-                    Index w;
-                    do {
-                        w = scc_stack.top();
-                        scc_stack.pop();
-                        scc_ids[w] = cur_scc_id;
-                        on_stack[w] = false;
-                    }
-                    while (v != w);
-                    cur_scc_id++;
-                }
-            }
-        }
-
-        return scc_ids;
     }
 
     /*
@@ -351,16 +249,14 @@ struct Transducer {
      * however never be used in the next composition step.
      */
     void simplify() {
-        std::vector<Index> scc_ids = compute_sccs_pearce();
+        std::vector<Index> scc_ids = compute_sccs();
 
         for (size_t i = 0; i < num_nodes; i++) {
             std::vector<Edge> new_succ_edges;
             for (size_t j = 0; j < succ_edges[i].size(); j++) {
                 Edge& edge = succ_edges[i][j];
-                Index v = edge.source;
-                Index w = edge.target;
-                if (scc_ids[v] == scc_ids[w]) {
-                    new_succ_edges.push_back(edge);
+                if (scc_ids[edge.source] == scc_ids[edge.target]) {
+                    new_succ_edges.push_back(std::move(edge));
                 }
             }
             succ_edges[i].swap(new_succ_edges);
@@ -370,12 +266,10 @@ struct Transducer {
     inline void cycle_begin_visiting(
             std::vector<bool>& visited,
             std::vector<bool>& on_stack,
-            std::stack<Index, std::vector<Index>>& vs,
-            std::stack<size_t, std::vector<size_t>>& is,
+            std::stack<StackFrame, std::vector<StackFrame>>& stack,
             Index v
     ) {
-        vs.push(v);
-        is.push(0);
+        stack.push({v, 0});
         visited[v] = true;
         on_stack[v] = true;
     }
@@ -383,33 +277,31 @@ struct Transducer {
     bool cycle_visit_loop(
             std::vector<bool>& visited,
             std::vector<bool>& on_stack,
-            std::stack<Index, std::vector<Index>>& vs,
-            std::stack<size_t, std::vector<size_t>>& is,
+            std::stack<StackFrame, std::vector<StackFrame>>& stack,
             std::vector<Edge>& cycle
     ) {
-        Index v = vs.top();
-        const size_t begin = is.top();
+        StackFrame& frame = stack.top();
+        Index v = frame.node;
         const size_t end = succ_edges[v].size();
-        for (size_t i = begin; i < end; i++) {
+        for (size_t i = frame.edge; i < end; i++) {
             // begin edge
             const Edge& edge = succ_edges[v][i];
-            const Index w = edge.target;
             if (edge.north == edge.south) {
+                const Index w = edge.target;
                 if (!visited[w]) {
                     // explore edge
-                    is.pop();
-                    is.push(i+1);
-                    cycle_begin_visiting(visited, on_stack, vs, is, w);
+                    frame.edge = i+1;
+                    cycle_begin_visiting(visited, on_stack, stack, w);
                     return false;
                 }
                 else if (on_stack[w]) {
                     // found cycle
                     do {
                         cycle.push_back(succ_edges[v][i]);
-                        vs.pop();
-                        is.pop();
-                        v = vs.top();
-                        i = is.top()-1;
+                        stack.pop();
+                        frame = stack.top();
+                        v = frame.node;
+                        i = frame.edge-1;
                     }
                     while (v != w);
 
@@ -419,129 +311,32 @@ struct Transducer {
             }
         }
         // finish visiting
-        vs.pop();
-        is.pop();
+        stack.pop();
         on_stack[v] = false;
         return false;
     }
 
-    std::vector<Edge> find_cycle_new() {
+    std::vector<Edge> find_cycle() {
         std::vector<bool> visited(num_nodes, false);
         std::vector<bool> on_stack(num_nodes, false);
 
-        std::vector<Index> vs_container; vs_container.reserve(num_nodes);
-        std::vector<size_t> is_container; is_container.reserve(num_nodes);
-        std::stack<Index, std::vector<Index>> vs(std::move(vs_container));
-        std::stack<size_t, std::vector<size_t>> is(std::move(is_container));
+        std::vector<StackFrame> stack_container; stack_container.reserve(num_nodes);
+        std::stack<StackFrame, std::vector<StackFrame>> stack(std::move(stack_container));
 
         std::vector<Edge> cycle;
 
         for (size_t v = 0; v < num_nodes; v++) {
             if (!visited[v]) {
-                cycle_begin_visiting(visited, on_stack, vs, is, v);
-                while (!vs.empty()) {
-                    if (cycle_visit_loop(visited, on_stack, vs, is, cycle)) {
+                cycle_begin_visiting(visited, on_stack, stack, v);
+                while (!stack.empty()) {
+                    if (cycle_visit_loop(visited, on_stack, stack, cycle)) {
                         return cycle;
                     }
                 }
             }
         }
 
-        return {};
-    }
-
-    /*
-     * DFS to find cycle with same north and south
-     * colors along each edge.
-     */
-    std::vector<Edge> find_cycle() {
-        std::stack<StackFrame> stack;
-        std::vector<bool> on_stack(num_nodes, false);
-        std::vector<bool> visited(num_nodes, false);
-
-        size_t i = 0;
-        bool new_node = false;
-
-        std::vector<Edge> parent(num_nodes);
-        Index cycle_node;
-        bool found_cycle = false;
-
-        Index v;
-        size_t j = 0;
-        while (!found_cycle) {
-            if (new_node) {
-                // explore new node
-                visited[v] = true;
-                on_stack[v] = true;
-                j = 0;
-                new_node = false;
-            }
-            else {
-                if (stack.empty()) {
-                    // find next initial node
-                    while (i < num_nodes && visited[i]) {
-                        i++;
-                    }
-                    if (i == num_nodes) {
-                        break;
-                    }
-                    else {
-                        v = i;
-                        new_node = true;
-                    }
-                }
-                else {
-                    // backtrack from edge
-                    StackFrame frame = stack.top();
-                    stack.pop();
-                    v = frame.node;
-                    j = frame.edge;
-                    j++;
-                }
-            }
-            while (!new_node && j != succ_edges[v].size()) {
-                Edge& edge = succ_edges[v][j];
-                if (edge.north == edge.south) {
-                    Index w = edge.target;
-                    if (!visited[w]) {
-                        // forward edge
-                        parent[w] = edge;
-                        stack.push({v, j});
-                        v = w;
-                        new_node = true;
-                    }
-                    else if (on_stack[w]) {
-                        // backedge, found cycle
-                        parent[w] = edge;
-                        cycle_node = w;
-                        new_node = true;
-                        found_cycle = true;
-                    }
-                }
-                j++;
-            }
-            if (!new_node) {
-                // backtrack from node v
-                on_stack[v] = false;
-            }
-        }
-
-        if (found_cycle) {
-            // create cycle
-            std::vector<Edge> cycle;
-            v = cycle_node;
-            do {
-                Edge edge = parent[v];
-                v = edge.source;
-                cycle.push_back(edge);
-            }
-            while (v != cycle_node);
-            std::reverse(std::begin(cycle), std::end(cycle));
-            return cycle;
-        }
-        else {
-            return {};
-        }
+        return cycle;
     }
 
     /*
@@ -552,7 +347,7 @@ struct Transducer {
      */
     bool periodic(int height, Tiling& tiling) {
         // find cycle with dfs
-        std::vector<Edge> cycle = find_cycle_new();
+        std::vector<Edge> cycle = find_cycle();
 
         if (!cycle.empty()) {
             int width = cycle.size();
@@ -615,10 +410,12 @@ struct Transducer {
                                 node_map[j12] = succ_index;
                             }
 
-                            Edge& e = composition.add_edge(pred_index, succ_index, edge1.north, edge2.south);
-                            e.tiles.reserve(edge1.tiles.size() + edge2.tiles.size());
-                            e.tiles.insert(std::end(e.tiles), std::cbegin(edge1.tiles), std::cend(edge1.tiles));
-                            e.tiles.insert(std::end(e.tiles), std::cbegin(edge2.tiles), std::cend(edge2.tiles));
+                            Edge* edge = composition.add_edge(pred_index, succ_index, edge1.north, edge2.south);
+                            if (edge != nullptr) {
+                                edge->tiles.reserve(edge1.tiles.size() + edge2.tiles.size());
+                                edge->tiles.insert(std::end(edge->tiles), std::cbegin(edge1.tiles), std::cend(edge1.tiles));
+                                edge->tiles.insert(std::end(edge->tiles), std::cbegin(edge2.tiles), std::cend(edge2.tiles));
+                            }
                         }
                     }
                 }

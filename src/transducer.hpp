@@ -278,7 +278,8 @@ struct Transducer {
             std::vector<bool>& visited,
             std::vector<bool>& on_stack,
             std::stack<StackFrame, std::vector<StackFrame>>& stack,
-            std::vector<Edge>& cycle
+            std::vector<Edge>& cycle,
+            const bool periodic
     ) {
         StackFrame& frame = stack.top();
         const Index v = frame.node;
@@ -286,7 +287,7 @@ struct Transducer {
         for (size_t i = frame.edge; i < end; i++) {
             // begin edge
             const Edge& edge = succ_edges[v][i];
-            if (edge.north == edge.south) {
+            if (!periodic || edge.north == edge.south) {
                 const Index w = edge.target;
                 if (!visited[w]) {
                     // explore edge
@@ -313,7 +314,7 @@ struct Transducer {
         return false;
     }
 
-    std::vector<Edge> find_cycle() {
+    std::vector<Edge> find_cycle(const bool periodic) {
         std::vector<bool> visited(num_nodes, false);
         std::vector<bool> on_stack(num_nodes, false);
 
@@ -326,7 +327,7 @@ struct Transducer {
             if (!visited[v]) {
                 cycle_begin_visiting(visited, on_stack, stack, v);
                 while (!stack.empty()) {
-                    if (cycle_visit_loop(visited, on_stack, stack, cycle)) {
+                    if (cycle_visit_loop(visited, on_stack, stack, cycle, periodic)) {
                         return cycle;
                     }
                 }
@@ -342,9 +343,9 @@ struct Transducer {
      * If the transducer contains a periodic cycle, it
      * returns the cycle as a rectangular tiling.
      */
-    bool periodic(int height, Tiling& tiling) {
+    bool periodic(int height, Tiling& tiling, const bool proper) {
         // find cycle with dfs
-        std::vector<Edge> cycle = find_cycle();
+        std::vector<Edge> cycle = find_cycle(proper);
 
         if (!cycle.empty()) {
             int width = cycle.size();
@@ -442,7 +443,7 @@ struct TilesetResult {
  * Semi-decision algorithm to test if set of tiles is periodic or finite.
  * If it is periodic, also return a periodic tiling.
  */
-TilesetResult test(const Tileset& tileset, int max_k, int verbosity = 0) {
+TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, int verbosity = 0) {
     const Color num_colors = tileset.max_color + 1;
     Transducer trans(num_colors, tileset.tiles);
     if (verbosity >= 2) {
@@ -453,7 +454,6 @@ TilesetResult test(const Tileset& tileset, int max_k, int verbosity = 0) {
     Transducer trans_k(num_colors);
 
     TilesetResult r;
-    Tiling tiling;
     for (int k = 1; k <= max_k; k++) {
         if (verbosity >= 1) {
             std::cout << "Testing k = " << k << std::endl;
@@ -473,11 +473,13 @@ TilesetResult test(const Tileset& tileset, int max_k, int verbosity = 0) {
             r.result = TilesetClass::FINITE;
             return r;
         }
-        if (trans_k.periodic(k, tiling)) {
+        if (trans_k.periodic(k, r.tiling, true)) {
             // tileset is periodic
             r.result = TilesetClass::PERIODIC;
-            r.tiling = tiling;
             return r;
+        }
+        if (always_test) {
+            trans_k.periodic(k, r.tiling, false);
         }
     }
     // unknown result

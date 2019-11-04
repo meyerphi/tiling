@@ -343,19 +343,6 @@ struct Transducer {
         return false;
     }
 
-    void print_debug() {
-        std::cout << "Node array:" << std::endl;
-        for (Index i = 0; i < num_nodes(); i++) {
-            std::cout << " [" << nodes[i] << "," << nodes[i+1] << "]";
-        }
-        std::cout << std::endl;
-        std::cout << "Edge array:" << std::endl;
-        for (const Edge& e : edges) {
-            std::cout << " " << e.target;
-        }
-        std::cout << std::endl;
-    }
-
     std::vector<Edge> find_cycle(const bool periodic) const {
 
         std::vector<bool> visited(num_nodes(), false);
@@ -510,7 +497,6 @@ TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, 
     if (verbosity >= 2) {
         std::cout << "Transducer for tileset without simplification" << std::endl;
         trans.print();
-        trans.print_debug();
     }
     trans.simplify();
     Transducer trans_k(num_colors);
@@ -528,13 +514,11 @@ TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, 
         if (verbosity >= 2) {
             std::cout << "Transducer for k = " << k << " before simplification" << std::endl;
             trans_k.print();
-            trans_k.print_debug();
         }
         trans_k.simplify();
         if (verbosity >= 2) {
             std::cout << "Transducer for k = " << k << " after simplification" << std::endl;
             trans_k.print();
-            trans_k.print_debug();
         }
         if (trans_k.empty()) {
             // tileset is finite

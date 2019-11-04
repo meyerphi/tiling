@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
+#include <ctime>
 
 #include "tiles.hpp"
 #include "simple_svg.hpp"
@@ -34,18 +36,19 @@ template <typename T, size_t N>
 constexpr size_t dim(T(&)[N]) { return N; }
 constexpr size_t num_available_colors = dim(colorset);
 
-svg::Color get_color(const size_t i) {
-    return svg::Color(colorset[i][0], colorset[i][1], colorset[i][2]);
+svg::Color get_color(const size_t i, const std::vector<size_t>& permutation) {
+    const size_t j = permutation[i];
+    return svg::Color(colorset[j][0], colorset[j][1], colorset[j][2]);
 }
 svg::Stroke get_stroke() {
     return svg::Stroke(0.025, svg::Color(0,0,0));
 }
 
-void add_tile(const Tile& tile, svg::Document& doc, int x, int y) {
-    svg::Polygon north(get_color(tile.north), get_stroke());
-    svg::Polygon east(get_color(tile.east), get_stroke());
-    svg::Polygon south(get_color(tile.south), get_stroke());
-    svg::Polygon west(get_color(tile.west), get_stroke());
+void add_tile(const Tile& tile, svg::Document& doc, int x, int y, const std::vector<size_t>& permutation) {
+    svg::Polygon north(get_color(tile.north, permutation), get_stroke());
+    svg::Polygon east(get_color(tile.east, permutation), get_stroke());
+    svg::Polygon south(get_color(tile.south, permutation), get_stroke());
+    svg::Polygon west(get_color(tile.west, permutation), get_stroke());
 
     north << svg::Point(x,y) << svg::Point(x+1,y) << svg::Point(x+0.5,y+0.5);
     east << svg::Point(x+1,y) << svg::Point(x+1,y+1) << svg::Point(x+0.5,y+0.5);
@@ -57,11 +60,21 @@ void add_tile(const Tile& tile, svg::Document& doc, int x, int y) {
     doc << north << east << south << west << border;
 }
 
-bool draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename) {
+bool draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename, const bool randomize_colors = false) {
     if (tileset.max_color >= num_available_colors) {
         std::cerr << "Error: not enough colors available to draw tiling" << std::endl;
         return false;
     }
+    std::vector<size_t> color_permutation;
+    color_permutation.reserve(num_available_colors);
+    for (size_t i = 0; i < num_available_colors; i++) {
+        color_permutation.push_back(i);
+    }
+    if (randomize_colors) {
+        std::srand (std::time(0));
+        std::random_shuffle(std::begin(color_permutation), std::end(color_permutation));
+    }
+
 
     svg::Dimensions dimensions(tiling.get_width(), tiling.get_height());
     svg::Document doc(filename, svg::Layout(dimensions, svg::Layout::TopLeft));
@@ -71,7 +84,7 @@ bool draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filen
             const TileIndex i = tiling.get_tile_index(x, y);
             const Tile& tile = tileset.get_tile(i);
 
-            add_tile(tile, doc, x, y);
+            add_tile(tile, doc, x, y, color_permutation);
         }
     }
 

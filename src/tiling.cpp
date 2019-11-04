@@ -22,6 +22,7 @@ void print_usage(const char* argv[]) {
     std::cout << "Options:" << std::endl;
     std::cout << "    -h          Show this help" << std::endl;
     std::cout << "    -k <max_k>  Maximum value of k to construct transducer for" << std::endl;
+    std::cout << "    -r          Randomize colors in output" << std::endl;
     std::cout << "    -v          Increase verbosity (may be specified more than once)" << std::endl;
 
 }
@@ -42,6 +43,7 @@ int main(const int argc, const char* argv[]) {
     bool parse_input_name = true;
     bool parse_output_name = true;
     bool parse_k = false;
+    bool randomize_colors = false;
 
     for (int i = 1; i < argc; i++) {
         std::string arg(argv[i]);
@@ -55,6 +57,9 @@ int main(const int argc, const char* argv[]) {
             else if (!arg.compare(1, 1, "h")) {
                 print_usage(argv);
                 return EXIT_SUCCESS;
+            }
+            else if (!arg.compare(1, 1, "r")) {
+                randomize_colors = true;
             }
             else {
                 std::cerr << "Error: unknown option: " << arg << std::endl;
@@ -109,7 +114,7 @@ int main(const int argc, const char* argv[]) {
         std::cout << "periodic" << std::endl;
         tiling.print();
         if (output_svg) {
-            if (!draw_tiling(tileset, tiling, svg_filename)) {
+            if (!draw_tiling(tileset, tiling, svg_filename, randomize_colors)) {
                 return EXIT_FAILURE;
             }
         }

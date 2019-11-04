@@ -150,7 +150,6 @@ struct Transducer {
     Index num_nodes() const {
         return nodes.size()-1;
     }
-
     Index num_edges() const {
         return edges.size();
     }
@@ -173,8 +172,6 @@ struct Transducer {
     }
 
     Edge& add_edge(Index source, Index target, Color north, Color south) {
-        assert(nodes[source+1] == edges.size());
-
         nodes[source+1]++;
         edges.emplace_back(target, north, south);
         return edges.back();
@@ -409,13 +406,9 @@ struct Transducer {
         return false;
     }
 
+    // emptiness test requires call to simplify() before
     bool empty() const {
-        for (Index i = 0; i < num_nodes(); i++) {
-            if (get_edge_begin(i) != get_edge_end(i)) {
-                return false;
-            }
-        }
-        return true;
+        return num_edges() == 0;
     }
 
     /*

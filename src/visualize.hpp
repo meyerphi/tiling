@@ -60,10 +60,9 @@ void add_tile(const Tile& tile, svg::Document& doc, int x, int y, const std::vec
     doc << north << east << south << west << border;
 }
 
-bool draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename, const bool randomize_colors = false) {
+void draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filename, const bool randomize_colors = false) {
     if (tileset.max_color >= num_available_colors) {
-        std::cerr << "Error: not enough colors available to draw tiling" << std::endl;
-        return false;
+        throw std::invalid_argument("not enough colors available to draw tiling");
     }
     std::vector<size_t> color_permutation;
     color_permutation.reserve(num_available_colors);
@@ -89,5 +88,4 @@ bool draw_tiling(const Tileset& tileset, const Tiling& tiling, std::string filen
     }
 
     doc.save();
-    return true;
 }

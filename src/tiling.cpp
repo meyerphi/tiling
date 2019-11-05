@@ -29,6 +29,40 @@ void print_usage(const char* argv[]) {
 
 }
 
+void run_test(
+        const Tileset& tileset,
+        const int max_k,
+        const bool print_always,
+        const bool create_tiling,
+        const bool randomize_colors,
+        const bool output_svg,
+        const std::string& svg_filename,
+        const int verbosity
+) {
+    TilesetResult r = test(tileset, max_k, print_always, create_tiling, verbosity);
+
+    if (r.result == TilesetClass::FINITE) {
+        std::cout << "finite" << std::endl;
+    }
+    else if (r.result == TilesetClass::PERIODIC) {
+        std::cout << "periodic" << std::endl;
+    }
+    else if (r.result == TilesetClass::APERIODIC) {
+        // this will currently never happen
+        std::cout << "aperiodic" << std::endl;
+    }
+    else {
+        std::cout << "unknown" << std::endl;
+    }
+
+    if (create_tiling && (r.result == TilesetClass::PERIODIC || print_always)) {
+        r.tiling.print();
+        if (output_svg) {
+            draw_tiling(tileset, r.tiling, svg_filename, randomize_colors);
+        }
+    }
+}
+
 int main(const int argc, const char* argv[]) {
     if (argc < 2) {
         print_usage(argv);
@@ -112,31 +146,22 @@ int main(const int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    Tileset tileset = Tileset::parse_tileset(tileset_file);
-
-    TilesetResult r = test(tileset, max_k, print_always, create_tiling, verbosity);
-
-    if (r.result == TilesetClass::FINITE) {
-        std::cout << "finite" << std::endl;
+    try {
+        const Tileset tileset = Tileset::parse_tileset(tileset_file);
+        run_test(tileset, max_k, print_always, create_tiling, randomize_colors, output_svg, svg_filename, verbosity);
+        return EXIT_SUCCESS;
     }
-    else if (r.result == TilesetClass::PERIODIC) {
-        std::cout << "periodic" << std::endl;
+    catch(const std::bad_alloc&) {
+        std::cerr << "Error: out of memory" << std::endl;
+        return EXIT_FAILURE;
     }
-    else if (r.result == TilesetClass::APERIODIC) {
-        // this will currently never happen
-        std::cout << "aperiodic" << std::endl;
+    catch(const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
     }
-    else {
-        std::cout << "unknown" << std::endl;
-    }
-
-    if (create_tiling && (r.result == TilesetClass::PERIODIC || print_always)) {
-        r.tiling.print();
-        if (output_svg) {
-            if (!draw_tiling(tileset, r.tiling, svg_filename, randomize_colors)) {
-                return EXIT_FAILURE;
-            }
-        }
+    catch(...) {
+        std::cerr << "Error: unknown error" << std::endl;
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;

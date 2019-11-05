@@ -423,11 +423,12 @@ struct Transducer {
      */
     Transducer compose(const Transducer& trans2) const {
         const Index product_size = num_nodes() * trans2.num_nodes();
+        const size_t product_height = height + trans2.height;
         // detect overflow
         assert (product_size / num_nodes() == trans2.num_nodes());
 
         Transducer composition;
-        composition.height = height + trans2.height;
+        composition.height = product_height;
         std::vector<Index> node_map(product_size, UNEXPLORED);
 
         for (Index i1 = 0; i1 < num_nodes(); i1++) {
@@ -456,7 +457,7 @@ struct Transducer {
                             composition.add_edge(source, target, edge1.north, edge2.south);
                             // this part can be omitted if one only needs to decide periodicity,
                             // but is needed to actually to recover a periodic tiling
-                            if (composition.height > 0) {
+                            if (product_height > 0) {
                                 composition.tile_indices.insert(std::end(composition.tile_indices), std::cbegin(tile_indices) + height*k1, std::cbegin(tile_indices) + height*(k1+1));
                                 composition.tile_indices.insert(std::end(composition.tile_indices), std::cbegin(trans2.tile_indices) + trans2.height*k2, std::cbegin(trans2.tile_indices) + trans2.height*(k2+1));
                             }

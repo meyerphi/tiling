@@ -305,6 +305,7 @@ struct Transducer {
         }
         nodes[num_nodes()] = cur_start;
         edges.resize(cur_start);
+        tile_indices.resize(cur_start*height);
     }
 
     inline void cycle_begin_visiting(

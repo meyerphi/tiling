@@ -14,7 +14,6 @@ struct Edge {
     Index target;
     Color north;
     Color south;
-    std::vector<TileIndex> tiles;
 
     // only needed to resize edge array to smaller array
     // will never be called
@@ -101,14 +100,18 @@ struct DoubleStack {
 };
 
 struct Transducer {
+    size_t height;
+
     // graph stored in compressed sparse row format
     std::vector<Index> nodes;
     std::vector<Edge> edges;
+    // tile indices for edge e are in range [e*height,(e+1)*height)
+    std::vector<TileIndex> tile_indices;
 
     /*
      * Create empty transducer
      */
-    Transducer() {
+    Transducer() : height(0) {
         nodes.push_back(0);
     }
 
@@ -126,6 +129,9 @@ struct Transducer {
      * Create transducer for given number of color and set of tiles.
      */
     Transducer(const Color num_colors, const std::vector<Tile>& tiles, const bool create_tiling = true) : Transducer() {
+        if (create_tiling) {
+            height = 1;
+        }
         // group tiles by source color
         std::vector<std::vector<std::pair<Tile, TileIndex>>> source_tiles(num_colors);
 
@@ -141,9 +147,9 @@ struct Transducer {
                 const Tile& tile = entry.first;
                 const TileIndex t = entry.second;
                 assert(v == tile.west);
-                Edge& edge = add_edge(tile.west, tile.east, tile.north, tile.south);
+                add_edge(tile.west, tile.east, tile.north, tile.south);
                 if (create_tiling) {
-                    edge.tiles.push_back(t);
+                    tile_indices.push_back(t);
                 }
             }
         }
@@ -165,6 +171,9 @@ struct Transducer {
     const Edge& get_edge(Index e) const {
         return edges[e];
     }
+    TileIndex get_tile_index(Index e, size_t k) const {
+        return tile_indices[(size_t)e*height + k];
+    }
 
     Index add_node() {
         Index v = num_nodes();
@@ -173,10 +182,11 @@ struct Transducer {
         return v;
     }
 
-    Edge& add_edge(Index source, Index target, Color north, Color south) {
+    Index add_edge(Index source, Index target, Color north, Color south) {
+        Index e = num_edges();
         nodes[source+1]++;
         edges.emplace_back(target, north, south);
-        return edges.back();
+        return e;
     }
 
     inline void pearce_begin_visiting(
@@ -284,6 +294,9 @@ struct Transducer {
                     // apparently copy is here faster than move
                     // with guarded check for j != cur_index
                     edges[cur_index] = edge;
+                    for (size_t k = 0; k < height; k++) {
+                        tile_indices[(size_t)cur_index*height + k] = tile_indices[(size_t)i*height + k];
+                    }
                     cur_index++;
                 }
             }
@@ -309,7 +322,7 @@ struct Transducer {
             std::vector<bool>& visited,
             std::vector<bool>& on_stack,
             std::stack<StackFrame, std::vector<StackFrame>>& stack,
-            std::vector<Edge>& cycle,
+            std::vector<Index>& cycle,
             const bool periodic
     ) const {
         StackFrame& frame = stack.top();
@@ -328,11 +341,11 @@ struct Transducer {
                 }
                 else if (on_stack[w]) {
                     // found cycle
-                    cycle.push_back(get_edge(i));
+                    cycle.push_back(i);
                     while (stack.top().node != w) {
                         stack.pop();
                         frame = stack.top();
-                        cycle.push_back(get_edge(frame.edge-1));
+                        cycle.push_back(frame.edge-1);
                     }
                     std::reverse(std::begin(cycle), std::end(cycle));
                     return true;
@@ -345,7 +358,7 @@ struct Transducer {
         return false;
     }
 
-    std::vector<Edge> find_cycle(const bool periodic) const {
+    std::vector<Index> find_cycle(const bool periodic) const {
 
         std::vector<bool> visited(num_nodes(), false);
         std::vector<bool> on_stack(num_nodes(), false);
@@ -353,7 +366,7 @@ struct Transducer {
         std::vector<StackFrame> stack_container; stack_container.reserve(num_nodes());
         std::stack<StackFrame, std::vector<StackFrame>> stack(std::move(stack_container));
 
-        std::vector<Edge> cycle;
+        std::vector<Index> cycle;
 
         for (Index v = 0; v < num_nodes(); v++) {
             if (!visited[v]) {
@@ -375,19 +388,20 @@ struct Transducer {
      * If the transducer contains a periodic cycle, it
      * returns the cycle as a rectangular tiling.
      */
-    bool periodic(int height, Tiling& tiling, const bool proper, const bool create_tiling) const {
+    bool periodic(Tiling& tiling, const bool proper) const {
         // find cycle with dfs
-        std::vector<Edge> cycle = find_cycle(proper);
+        std::vector<Index> cycle = find_cycle(proper);
 
         if (!cycle.empty()) {
-            if (create_tiling) {
-                int width = cycle.size();
+            if (height > 0) {
+                size_t width = cycle.size();
 
                 tiling.set_dimensions(width, height);
-                for (int x = 0; x < width; x++) {
-                    std::vector<TileIndex>& column = cycle[x].tiles;
-                    for (int y = 0; y < height; y++) {
-                        TileIndex t = column[y];
+                for (size_t x = 0; x < width; x++) {
+                    const Index e = cycle[x];
+                    //const std::vector<TileIndex>& column = edge.tiles;
+                    for (size_t y = 0; y < height; y++) {
+                        TileIndex t = get_tile_index(e, y);
                         tiling.set_tile_index(x, y, t);
                     }
                 }
@@ -406,12 +420,13 @@ struct Transducer {
      * Compose this transducer with another transducer,
      * and return the result.
      */
-    Transducer compose(const Transducer& trans2, const bool create_tiling = true) const {
+    Transducer compose(const Transducer& trans2) const {
         const Index product_size = num_nodes() * trans2.num_nodes();
         // detect overflow
         assert (product_size / num_nodes() == trans2.num_nodes());
 
         Transducer composition;
+        composition.height = height + trans2.height;
         std::vector<Index> node_map(product_size, UNEXPLORED);
 
         for (Index i1 = 0; i1 < num_nodes(); i1++) {
@@ -437,13 +452,12 @@ struct Transducer {
                                 node_map[i12] = source;
                             }
 
-                            Edge& edge = composition.add_edge(source, target, edge1.north, edge2.south);
+                            composition.add_edge(source, target, edge1.north, edge2.south);
                             // this part can be omitted if one only needs to decide periodicity,
                             // but is needed to actually to recover a periodic tiling
-                            if (create_tiling) {
-                                edge.tiles.reserve(edge1.tiles.size() + edge2.tiles.size());
-                                edge.tiles.insert(std::end(edge.tiles), std::cbegin(edge1.tiles), std::cend(edge1.tiles));
-                                edge.tiles.insert(std::end(edge.tiles), std::cbegin(edge2.tiles), std::cend(edge2.tiles));
+                            if (composition.height > 0) {
+                                composition.tile_indices.insert(std::end(composition.tile_indices), std::cbegin(tile_indices) + height*k1, std::cbegin(tile_indices) + height*(k1+1));
+                                composition.tile_indices.insert(std::end(composition.tile_indices), std::cbegin(trans2.tile_indices) + trans2.height*k2, std::cbegin(trans2.tile_indices) + trans2.height*(k2+1));
                             }
                         }
                     }
@@ -468,7 +482,7 @@ struct Transducer {
     }
 
     void print_size() const {
-        std::cout << "n = " << num_nodes() << "; m = " << num_edges() << std::endl;
+        std::cout << "n = " << num_nodes() << "; m = " << num_edges() << "; h = " << height << std::endl;
     }
 
     void print() const {
@@ -477,8 +491,8 @@ struct Transducer {
                 const Edge& edge = get_edge(i);
                 std::cout << "  " << v << " -> " << edge.target << " (" << (int)edge.north << "/" << (int)edge.south << ")";
                 std::cout << " [";
-                for (const TileIndex& t : edge.tiles) {
-                    std::cout << " " << (int)t;
+                for (size_t k = i*height; k < (i+1)*height; k++) {
+                    std::cout << " " << (int)tile_indices[k];
                 }
                 std::cout << " ]" << std::endl;
             }
@@ -512,7 +526,7 @@ TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, 
         if (verbosity >= 1) {
             std::cout << "Testing k = " << k << std::endl;
         }
-        trans_k = trans_k.compose(trans, create_tiling);
+        trans_k = trans_k.compose(trans);
         if (verbosity >= 1) {
             std::cout << "Size of composition: ";
             trans_k.print_size();
@@ -531,13 +545,13 @@ TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, 
             r.result = TilesetClass::FINITE;
             return r;
         }
-        if (trans_k.periodic(k, r.tiling, true, create_tiling)) {
+        if (trans_k.periodic(r.tiling, true)) {
             // tileset is periodic
             r.result = TilesetClass::PERIODIC;
             return r;
         }
         if (always_test && create_tiling) {
-            trans_k.periodic(k, r.tiling, false, true);
+            trans_k.periodic(r.tiling, false);
         }
     }
     // unknown result

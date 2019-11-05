@@ -101,7 +101,7 @@ struct DoubleStack {
 };
 
 struct Transducer {
-    std::vector<std::vector<Edge>> succ_edges;
+    // graph stored in compressed sparse row format
     std::vector<Index> nodes;
     std::vector<Edge> edges;
 
@@ -116,9 +116,9 @@ struct Transducer {
      * Create identity transducer for given number of colors
      */
     Transducer(const Color colors) : Transducer() {
-        Index i = add_node();
+        Index v = add_node();
         for (Color c = 0; c < colors; c++) {
-            add_edge(i, i, c, c);
+            add_edge(v, v, c, c);
         }
     }
 
@@ -136,11 +136,11 @@ struct Transducer {
         }
 
         for (const auto& tileset : source_tiles) {
-            Index i = add_node();
+            Index v = add_node();
             for (const auto& entry : tileset) {
                 const Tile& tile = entry.first;
                 const TileIndex t = entry.second;
-                assert(i == tile.west);
+                assert(v == tile.west);
                 Edge& edge = add_edge(tile.west, tile.east, tile.north, tile.south);
                 edge.tiles.push_back(t);
             }
@@ -165,10 +165,10 @@ struct Transducer {
     }
 
     Index add_node() {
-        Index i = num_nodes();
-        nodes[i] = num_edges();
+        Index v = num_nodes();
+        nodes[v] = num_edges();
         nodes.push_back(num_edges());
-        return i;
+        return v;
     }
 
     Edge& add_edge(Index source, Index target, Color north, Color south) {
@@ -274,18 +274,18 @@ struct Transducer {
         Index cur_start = 0;
         Index cur_index = 0;
 
-        for (Index i = 0; i < num_nodes(); i++) {
-            const Index source_scc_id = scc_ids[i];
-            for (Index j = get_edge_begin(i); j < get_edge_end(i); j++) {
-                Edge& edge = edges[j];
+        for (Index v = 0; v < num_nodes(); v++) {
+            const Index source_scc_id = scc_ids[v];
+            for (Index i = get_edge_begin(v); i < get_edge_end(v); i++) {
+                Edge& edge = edges[i];
                 if (source_scc_id == scc_ids[edge.target]) {
                     // apparently copy is here faster than move
-                    // with guarded check cur_index
+                    // with guarded check for j != cur_index
                     edges[cur_index] = edge;
                     cur_index++;
                 }
             }
-            nodes[i] = cur_start;
+            nodes[v] = cur_start;
             cur_start = cur_index;
         }
         nodes[num_nodes()] = cur_start;
@@ -384,8 +384,8 @@ struct Transducer {
             for (int x = 0; x < width; x++) {
                 std::vector<TileIndex>& column = cycle[x].tiles;
                 for (int y = 0; y < height; y++) {
-                    TileIndex i = column[y];
-                    tiling.set_tile_index(x, y, i);
+                    TileIndex t = column[y];
+                    tiling.set_tile_index(x, y, t);
                 }
             }
             return true;
@@ -466,10 +466,10 @@ struct Transducer {
     }
 
     void print() const {
-        for (Index i = 0; i < num_nodes(); i++) {
-            for (Index j = get_edge_begin(i); j < get_edge_end(i); j++) {
-                const Edge& edge = get_edge(j);
-                std::cout << "  " << i << " -> " << edge.target << " (" << (int)edge.north << "/" << (int)edge.south << ")";
+        for (Index v = 0; v < num_nodes(); v++) {
+            for (Index i = get_edge_begin(v); i < get_edge_end(v); i++) {
+                const Edge& edge = get_edge(i);
+                std::cout << "  " << v << " -> " << edge.target << " (" << (int)edge.north << "/" << (int)edge.south << ")";
                 std::cout << " [";
                 for (const TileIndex& t : edge.tiles) {
                     std::cout << " " << (int)t;

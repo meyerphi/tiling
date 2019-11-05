@@ -125,7 +125,7 @@ struct Transducer {
     /*
      * Create transducer for given number of color and set of tiles.
      */
-    Transducer(const Color num_colors, const std::vector<Tile>& tiles) : Transducer() {
+    Transducer(const Color num_colors, const std::vector<Tile>& tiles, const bool create_tiling = true) : Transducer() {
         // group tiles by source color
         std::vector<std::vector<std::pair<Tile, TileIndex>>> source_tiles(num_colors);
 
@@ -142,7 +142,9 @@ struct Transducer {
                 const TileIndex t = entry.second;
                 assert(v == tile.west);
                 Edge& edge = add_edge(tile.west, tile.east, tile.north, tile.south);
-                edge.tiles.push_back(t);
+                if (create_tiling) {
+                    edge.tiles.push_back(t);
+                }
             }
         }
     }
@@ -373,19 +375,21 @@ struct Transducer {
      * If the transducer contains a periodic cycle, it
      * returns the cycle as a rectangular tiling.
      */
-    bool periodic(int height, Tiling& tiling, const bool proper) const {
+    bool periodic(int height, Tiling& tiling, const bool proper, const bool create_tiling) const {
         // find cycle with dfs
         std::vector<Edge> cycle = find_cycle(proper);
 
         if (!cycle.empty()) {
-            int width = cycle.size();
+            if (create_tiling) {
+                int width = cycle.size();
 
-            tiling.set_dimensions(width, height);
-            for (int x = 0; x < width; x++) {
-                std::vector<TileIndex>& column = cycle[x].tiles;
-                for (int y = 0; y < height; y++) {
-                    TileIndex t = column[y];
-                    tiling.set_tile_index(x, y, t);
+                tiling.set_dimensions(width, height);
+                for (int x = 0; x < width; x++) {
+                    std::vector<TileIndex>& column = cycle[x].tiles;
+                    for (int y = 0; y < height; y++) {
+                        TileIndex t = column[y];
+                        tiling.set_tile_index(x, y, t);
+                    }
                 }
             }
             return true;
@@ -402,7 +406,7 @@ struct Transducer {
      * Compose this transducer with another transducer,
      * and return the result.
      */
-    Transducer compose(const Transducer& trans2) const {
+    Transducer compose(const Transducer& trans2, const bool create_tiling = true) const {
         const Index product_size = num_nodes() * trans2.num_nodes();
         // detect overflow
         assert (product_size / num_nodes() == trans2.num_nodes());
@@ -436,9 +440,11 @@ struct Transducer {
                             Edge& edge = composition.add_edge(source, target, edge1.north, edge2.south);
                             // this part can be omitted if one only needs to decide periodicity,
                             // but is needed to actually to recover a periodic tiling
-                            edge.tiles.reserve(edge1.tiles.size() + edge2.tiles.size());
-                            edge.tiles.insert(std::end(edge.tiles), std::cbegin(edge1.tiles), std::cend(edge1.tiles));
-                            edge.tiles.insert(std::end(edge.tiles), std::cbegin(edge2.tiles), std::cend(edge2.tiles));
+                            if (create_tiling) {
+                                edge.tiles.reserve(edge1.tiles.size() + edge2.tiles.size());
+                                edge.tiles.insert(std::end(edge.tiles), std::cbegin(edge1.tiles), std::cend(edge1.tiles));
+                                edge.tiles.insert(std::end(edge.tiles), std::cbegin(edge2.tiles), std::cend(edge2.tiles));
+                            }
                         }
                     }
                 }
@@ -491,9 +497,9 @@ struct TilesetResult {
  * Semi-decision algorithm to test if set of tiles is periodic or finite.
  * If it is periodic, also return a periodic tiling.
  */
-TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, int verbosity = 0) {
+TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, bool create_tiling = false, int verbosity = 0) {
     const Color num_colors = tileset.max_color + 1;
-    Transducer trans(num_colors, tileset.tiles);
+    Transducer trans(num_colors, tileset.tiles, create_tiling);
     if (verbosity >= 2) {
         std::cout << "Transducer for tileset without simplification" << std::endl;
         trans.print();
@@ -506,7 +512,7 @@ TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, 
         if (verbosity >= 1) {
             std::cout << "Testing k = " << k << std::endl;
         }
-        trans_k = trans_k.compose(trans);
+        trans_k = trans_k.compose(trans, create_tiling);
         if (verbosity >= 1) {
             std::cout << "Size of composition: ";
             trans_k.print_size();
@@ -525,13 +531,13 @@ TilesetResult test(const Tileset& tileset, int max_k, bool always_test = false, 
             r.result = TilesetClass::FINITE;
             return r;
         }
-        if (trans_k.periodic(k, r.tiling, true)) {
+        if (trans_k.periodic(k, r.tiling, true, create_tiling)) {
             // tileset is periodic
             r.result = TilesetClass::PERIODIC;
             return r;
         }
-        if (always_test) {
-            trans_k.periodic(k, r.tiling, false);
+        if (always_test && create_tiling) {
+            trans_k.periodic(k, r.tiling, false, true);
         }
     }
     // unknown result

@@ -24,6 +24,7 @@ void print_usage(const char* argv[]) {
     std::cout << "    -k <max_k>  Maximum value of k to construct transducer for" << std::endl;
     std::cout << "    -r          Randomize colors in output" << std::endl;
     std::cout << "    -a          Always print largest horizontal tiling found, even if non-periodic vertically" << std::endl;
+    std::cout << "    -t          Only test for periodic/finite tilings, do not keep information to recover tiling" << std::endl;
     std::cout << "    -v          Increase verbosity (may be specified more than once)" << std::endl;
 
 }
@@ -46,6 +47,7 @@ int main(const int argc, const char* argv[]) {
     bool parse_k = false;
     bool randomize_colors = false;
     bool print_always = false;
+    bool create_tiling = true;
 
     for (int i = 1; i < argc; i++) {
         std::string arg(argv[i]);
@@ -65,6 +67,9 @@ int main(const int argc, const char* argv[]) {
             }
             else if (!arg.compare(1, 1, "a")) {
                 print_always = true;
+            }
+            else if (!arg.compare(1, 1, "t")) {
+                create_tiling = false;
             }
             else {
                 std::cerr << "Error: unknown option: " << arg << std::endl;
@@ -109,7 +114,7 @@ int main(const int argc, const char* argv[]) {
 
     Tileset tileset = Tileset::parse_tileset(tileset_file);
 
-    TilesetResult r = test(tileset, max_k, print_always, verbosity);
+    TilesetResult r = test(tileset, max_k, print_always, create_tiling, verbosity);
 
     if (r.result == TilesetClass::FINITE) {
         std::cout << "finite" << std::endl;
@@ -125,7 +130,7 @@ int main(const int argc, const char* argv[]) {
         std::cout << "unknown" << std::endl;
     }
 
-    if (r.result == TilesetClass::PERIODIC || print_always) {
+    if (create_tiling && (r.result == TilesetClass::PERIODIC || print_always)) {
         r.tiling.print();
         if (output_svg) {
             if (!draw_tiling(tileset, r.tiling, svg_filename, randomize_colors)) {
